@@ -21,6 +21,7 @@ size_t MAX_LINE_LEN = 10000;
 FILE *fp; // file struct for stdin
 char **tokens;
 char *line;
+void fork_fn();
 
 void initialize()
 {
@@ -37,43 +38,7 @@ void initialize()
 }
 
 
-void fork_fn(){
 
-	printf("this is a fork function \n");
-	pid_t child_pid;
-	child_pid=fork();
-
-	printf("child_pid is storing %d",child_pid);
-
-	if (child_pid == -1) {
-    perror("fork");
-    exit(EXIT_FAILURE);
-  }
-
-  /* The parent is waiting for the child to complete its task. */
-  if (child_pid == 0) {
-    // int exec_return_value = execlp("/bin/ls", "ls", "-l", (char *) NULL);
-    // if (exec_return_value == -1) {
-    //   perror("execlp");
-    //   exit(EXIT_FAILURE);
-    // }
-
-    execvp(tokens[0],tokens);
-  }
-  else {
-    int wait_status;
-    pid_t terminated_child_pid = wait(&wait_status);
-    if (terminated_child_pid == -1) {
-      perror("wait");
-      exit(EXIT_FAILURE);
-    }
-    else {printf("Parent: my child %d terminates.\n", terminated_child_pid);}
-    
-    /* We can use the macro to examine the waiting status here. */
-  }
-  exit(EXIT_SUCCESS);
-
-}
 
 void tokenize (char * string)
 {
@@ -132,4 +97,57 @@ int main()
 	} while( run_command() != EXIT_CMD );
 
 	return 0;
+}
+
+
+void fork_fn(){
+
+	// printf("this is a fork function \n");
+	pid_t child_pid;
+	child_pid=fork();
+
+	// printf("child_pid is storing %d\n",child_pid);
+
+	if (child_pid == -1) {
+    perror("fork");
+    exit(EXIT_FAILURE);
+  }
+
+  /* The parent is waiting for the child to complete its task. */
+  if (child_pid == 0) {
+    // int exec_return_value = execlp("/bin/ls", "ls", "-l", (char *) NULL);
+    // if (exec_return_value == -1) {
+    //   perror("execlp");
+    //   exit(EXIT_FAILURE);
+    // }
+    if (in) { //if '<' char was found in string inputted by user
+        int fd0 = open(input, O_RDONLY, 0);
+        dup2(fd0, STDIN_FILENO);
+        close(fd0);
+        in = 0;
+    }
+
+    if (out) { //if '>' was found in string inputted by user
+        int fd1 = creat(output, 0644);
+        dup2(fd1, STDOUT_FILENO);
+        close(fd1);
+        out = 0;
+    }   
+
+    execvp(tokens[0],tokens);
+  }
+  else {
+    int wait_status;
+    pid_t terminated_child_pid = wait(&wait_status);
+    if (terminated_child_pid == -1) {
+      perror("wait");
+      exit(EXIT_FAILURE);
+    }
+    else {printf("Parent: my child %d terminates.\n", terminated_child_pid);}
+    
+    
+    /* We can use the macro to examine the waiting status here. */
+  }
+  //exit(EXIT_SUCCESS);
+
 }
