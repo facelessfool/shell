@@ -4,6 +4,9 @@
 #include <string.h>
 #include <assert.h>
 #include <sys/wait.h>
+#include <time.h>
+#include <errno.h>
+#include <fcntl.h>
 
 //limits
 #define MAX_TOKENS 100
@@ -21,7 +24,13 @@ size_t MAX_LINE_LEN = 10000;
 FILE *fp; // file struct for stdin
 char **tokens;
 char *line;
-void fork_fn();
+
+void fork_fn(int);
+void runcmd(int , char **);
+void pipes();
+
+
+
 
 void initialize()
 {
@@ -41,16 +50,17 @@ void initialize()
 
 
 void tokenize (char * string)
-{
-	int token_count = 0;
+{	int token_count=0;
 	int size = MAX_TOKENS;
 	char *this_token;
-
+tokens = malloc(sizeof(char*)*MAX_TOKENS);
 	while ( (this_token = strsep( &string, " \t\v\f\n\r")) != NULL) {
 
 		if (*this_token == '\0') continue;
 
+
 		tokens[token_count] = this_token;
+
 
 		printf("Token %d: %s\n", token_count, tokens[token_count]);
 
@@ -64,7 +74,9 @@ void tokenize (char * string)
 		}
 	}
 
-	fork_fn();
+	fork_fn(token_count);
+
+
 }
 
 void read_command() 
@@ -73,16 +85,16 @@ void read_command()
 	// getline will reallocate if input exceeds max length
 	assert( getline(&line, &MAX_LINE_LEN, fp) > -1); 
 
-	printf("Shell read this line: %s\n", line);
+//	printf("Shell read this line: %s\n", line);
 
 	tokenize(line);
 }
 
 int run_command() {
-
+	
 	if (strcmp( tokens[0], EXIT_STR ) == 0)
 		return EXIT_CMD;
-
+	
 	return UNKNOWN_CMD;
 }
 
@@ -90,64 +102,162 @@ int main()
 {
 	initialize();
 
-	do {
-		printf("sh550> ");
+	do {	
+		printf("mysh> ");
 		read_command();
 		
 	} while( run_command() != EXIT_CMD );
-
+	
 	return 0;
 }
 
 
-void fork_fn(){
 
-	// printf("this is a fork function \n");
-	pid_t child_pid;
-	child_pid=fork();
 
-	// printf("child_pid is storing %d\n",child_pid);
 
-	if (child_pid == -1) {
-    perror("fork");
-    exit(EXIT_FAILURE);
-  }
+void fork_fn(int n){
 
-  /* The parent is waiting for the child to complete its task. */
-  if (child_pid == 0) {
-    // int exec_return_value = execlp("/bin/ls", "ls", "-l", (char *) NULL);
-    // if (exec_return_value == -1) {
-    //   perror("execlp");
-    //   exit(EXIT_FAILURE);
-    // }
-    if (in) { //if '<' char was found in string inputted by user
-        int fd0 = open(input, O_RDONLY, 0);
-        dup2(fd0, STDIN_FILENO);
-        close(fd0);
-        in = 0;
-    }
+int newfd;
+pid_t pid;
 
-    if (out) { //if '>' was found in string inputted by user
-        int fd1 = creat(output, 0644);
-        dup2(fd1, STDOUT_FILENO);
-        close(fd1);
-        out = 0;
-    }   
+for(int i=0;i<n;i++){
 
-    execvp(tokens[0],tokens);
-  }
-  else {
-    int wait_status;
+
+
+if(*tokens[i]=='|'){
+
+pipes();
+}
+
+
+}
+
+
+
+pid = fork();
+
+if(pid==0){
+
+
+	for (int i =0;i< n;i++){
+
+		if(*tokens[i]=='>'){
+
+
+			if ((newfd = open(tokens[i+1], O_CREAT|O_TRUNC|O_WRONLY, 0644)) < 0) {
+				
+			perror("open failed");	/* open failed */
+			exit(1);
+			}
+			//printf("Token on i+1 gives %s\n",tokens[i+1]);
+				//printf("the value of i+1 is : %d\n",(i+1));
+
+
+		dup2(newfd, 1); 
+		tokens[i]=NULL;
+		execvp(tokens[0],tokens);
+		
+		}
+	
+	}
+	
+	for(int j=0;j<n;j++){
+	if(*tokens[j]=='<'){
+
+                        if ((newfd = open(tokens[j+1],O_RDONLY, 0644)) < 0) {
+                        perror("read failed");  /* open failed */
+                        exit(1);
+                }
+
+
+                dup2(newfd, 0); 
+                tokens[j]=NULL;
+                execvp(tokens[0],tokens);
+                }
+       		}
+		
+		execvp(tokens[0],tokens);	
+		
+  
+  
+
+        }
+
+
+else if(pid ==-1){
+printf("fork failed\n");
+
+	}
+
+else{
+	int wait_status;
     pid_t terminated_child_pid = wait(&wait_status);
     if (terminated_child_pid == -1) {
       perror("wait");
       exit(EXIT_FAILURE);
     }
-    else {printf("Parent: my child %d terminates.\n", terminated_child_pid);}
-    
-    
-    /* We can use the macro to examine the waiting status here. */
-  }
-  //exit(EXIT_SUCCESS);
+    else {//printf("Parent: my child %d terminates.\n", terminated_child_pid);
+}
+	
 
 }
+	}
+
+
+
+
+
+
+void pipes(){
+
+char * argv1[] = {"ls", "-al", "/", 0};
+	char * argv2[] = {"grep", "Jun", 0};
+
+	setbuf(stdout, NULL);
+
+	int status;
+	int pipefd[2];
+	pid_t cpid1;
+	pid_t cpid2;
+
+	// create a pipe
+	if (pipe(pipefd) == -1) {
+		perror("pipe");
+		exit(EXIT_FAILURE);
+	}
+
+	cpid1 = fork();
+	// child1 executes
+	if (cpid1 == 0) {
+		//printf("In CHILD-1 (PID=%d): executing command %s ...\n", getpid(), argv1[0]);
+		dup2(pipefd[1], 1);
+		close(pipefd[0]);
+		close(pipefd[1]);
+		execvp(argv1[0], argv1);
+		
+	} 
+
+	cpid2 = fork();
+	// child2 executes
+	if (cpid2 == 0) {
+		//printf("In CHILD-2 (PID=%d): executing command %s ...\n", getpid(), argv2[0]);
+		dup2(pipefd[0], 0);
+		close(pipefd[0]);
+		close(pipefd[1]);
+		execvp(argv2[0], argv2);
+	} 
+
+	// parent executes
+	
+	close(pipefd[0]);
+	close(pipefd[1]);
+	
+	waitpid(cpid1, &status, WUNTRACED);
+	//printf("In PARENT (PID=%d): successfully reaped child (PID=%d)\n", getpid(), cpid1);
+	waitpid(cpid2, &status, WUNTRACED);
+	//printf("In PARENT (PID=%d): successfully reaped child (PID=%d)\n", getpid(), cpid2);
+	exit(0);
+}
+
+
+
