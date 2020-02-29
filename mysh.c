@@ -27,7 +27,7 @@ char *line;
 
 void fork_fn(int);
 void runcmd(int , char **);
-void pipes();
+int pipes(int);
 
 
 
@@ -126,7 +126,7 @@ for(int i=0;i<n;i++){
 
 if(*tokens[i]=='|'){
 
-pipes();
+pipes(n);
 }
 
 
@@ -208,20 +208,52 @@ else{
 
 
 
-void pipes(){
+int pipes(int n){
 
-char * argv1[] = {"ls", "-al", "/", 0};
-	char * argv2[] = {"grep", "Jun", 0};
+int status;
+int pipe1[2];
+pid_t cpid1,cpid2;
+int p;
 
-	setbuf(stdout, NULL);
+char **tokens1;
+char **tokens2;
 
-	int status;
-	int pipefd[2];
-	pid_t cpid1;
-	pid_t cpid2;
+
+tokens1=malloc(sizeof(char*)*MAX_TOKENS);
+tokens2=malloc(sizeof(char*)*MAX_TOKENS);
+
+
+	for(int i=0;i<n;i++){
+		if(*tokens[i]=='|'){
+			p=i;
+			printf("p is %d\n",p);
+			printf("found pipe\n");
+		}
+
+
+	}
+
+	for(int i=0;i<p;i++){
+
+	tokens1[i]= tokens[i];
+	printf("tokens is : %s\t token 1 : %s\n",tokens[i],tokens1[i]);
+	}
+	tokens1[p]=NULL;
+
+	int j=0;
+	for(int i=p+1;i<n;i++){
+
+	tokens2[j]=tokens[i];
+	printf("tokens2 is %s\n",tokens2[j]);
+	j++;
+	}
+	tokens2[j]=NULL;
+
+	
+
 
 	// create a pipe
-	if (pipe(pipefd) == -1) {
+	if (pipe(pipe1) == -1) {
 		perror("pipe");
 		exit(EXIT_FAILURE);
 	}
@@ -230,34 +262,33 @@ char * argv1[] = {"ls", "-al", "/", 0};
 	// child1 executes
 	if (cpid1 == 0) {
 		//printf("In CHILD-1 (PID=%d): executing command %s ...\n", getpid(), argv1[0]);
-		dup2(pipefd[1], 1);
-		close(pipefd[0]);
-		close(pipefd[1]);
-		execvp(argv1[0], argv1);
-		
+		dup2(pipe1[1], 1);
+		close(pipe1[0]);
+		close(pipe1[1]);
+		execvp(tokens1[0], tokens1);
 	} 
 
 	cpid2 = fork();
 	// child2 executes
 	if (cpid2 == 0) {
 		//printf("In CHILD-2 (PID=%d): executing command %s ...\n", getpid(), argv2[0]);
-		dup2(pipefd[0], 0);
-		close(pipefd[0]);
-		close(pipefd[1]);
-		execvp(argv2[0], argv2);
+		dup2(pipe1[0], 0);
+		close(pipe1[0]);
+		close(pipe1[1]);
+		execvp(tokens2[0], tokens2);
 	} 
 
 	// parent executes
-	
-	close(pipefd[0]);
-	close(pipefd[1]);
+	close(pipe1[0]);
+	close(pipe1[1]);
 	
 	waitpid(cpid1, &status, WUNTRACED);
 	//printf("In PARENT (PID=%d): successfully reaped child (PID=%d)\n", getpid(), cpid1);
 	waitpid(cpid2, &status, WUNTRACED);
 	//printf("In PARENT (PID=%d): successfully reaped child (PID=%d)\n", getpid(), cpid2);
 	exit(0);
+
+	return 0;
+
+
 }
-
-
-
